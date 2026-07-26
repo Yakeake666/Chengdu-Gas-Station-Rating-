@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Gas Review Map - Chengdu Edition</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #3b82f6;
+            --green: #22c55e;
+            --yellow: #eab308;
+            --red: #ef4444;
+            --bg-color: #f3f4f6;
+            --card-bg: #ffffff;
+            --text-main: #1f2937;
+            --text-muted: #6b7280;
+            --border-color: #e5e7eb;
+        }
+
+        /* Dark Theme Variables */
+        body.dark-theme {
+            --bg-color: #111827;
+            --card-bg: #1f2937;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --border-color: #374151;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            transition: background-color 0.25s, border-color 0.25s;
+        }
+
+        body, html {
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+        }
+
+        #app {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        /* View Management */
+        .view {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--card-bg);
+            z-index: 10;
+            overflow-y: auto;
+        }
+        .view.active { display: block; }
+        #view-map { z-index: 5; display: block; }
+
+        /* --- Map View --- */
+        #map { 
+            height: 100%; 
+            width: 100%; 
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+        
+        .map-header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 15px;
+            z-index: 1000;
+            background: linear-gradient(to bottom, var(--card-bg) 0%, rgba(255,255,255,0) 100%);
+        }
+
+        .search-bar {
+            background: var(--card-bg);
+            border-radius: 25px;
+            padding: 12px 15px;
+            display: flex;
+            align-items: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            margin-bottom: 10px;
+            border: 1px solid var(--border-color);
+        }
+        .search-bar input {
+            border: none;
+            outline: none;
+            width: 100%;
+            margin-left: 10px;
+            font-size: 16px;
+            background: transparent;
+            color: var(--text-main);
+        }
+
+        .filters {
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            padding-bottom: 5px;
+        }
+        .filters select {
+            padding: 8px 14px;
+            border-radius: 20px;
+            border: 1px solid var(--border-color);
+            background: var(--card-bg);
+            color: var(--text-main);
+            font-size: 14px;
+            outline: none;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            cursor: pointer;
+        }
+
+        /* Map Markers Styles */
+        .custom-marker-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .custom-marker {
+            background: var(--card-bg);
+            border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.25);
+            border: 3.5px solid;
+            transition: transform 0.2s ease;
+        }
+        .custom-marker:hover {
+            transform: scale(1.1);
+        }
+        .custom-marker i {
+            font-size: 18px;
+        }
+
+        /* Bottom Info Card */
+        .bottom-card {
+            position: absolute;
+            bottom: 75px;
+            left: 5%;
+            width: 90%;
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 18px;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+            z-index: 1000;
+            transform: translateY(150%);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+            border: 1px solid var(--border-color);
+        }
+        .bottom-card.show { transform: translateY(0); }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .card-title { font-size: 18px; font-weight: bold; color: var(--text-main); }
+        .card-distance { color: var(--text-muted); font-size: 14px; font-weight: 500; }
+        .card-rating { color: var(--yellow); font-size: 16px; margin-bottom: 15px; display: flex; align-items: center; gap: 5px; }
+        
+        .btn-primary {
+            background: var(--primary); color: #fff; text-align: center; padding: 12px;
+            border-radius: 12px; text-decoration: none; font-weight: bold; cursor: pointer; border: none;
+            font-size: 16px; transition: background 0.2s;
+        }
+        .btn-primary:active { background: #2563eb; }
+
+        .btn-danger {
+            background: var(--red); color: #fff; text-align: center; padding: 12px;
+            border-radius: 12px; font-weight: bold; cursor: pointer; border: none;
+            font-size: 16px; margin-top: 20px;
+        }
+
+        /* Bottom Navigation */
+        .bottom-nav {
+            position: absolute; bottom: 0; left: 0; width: 100%; height: 65px;
+            background: var(--card-bg); display: flex; justify-content: space-around; align-items: center;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.08); z-index: 1001;
+            border-top: 1px solid var(--border-color);
+        }
+        .nav-item { display: flex; flex-direction: column; align-items: center; color: var(--text-muted); cursor: pointer; width: 50%; }
+        .nav-item.active { color: var(--primary); }
+        .nav-item i { font-size: 22px; margin-bottom: 4px; }
+        .nav-item span { font-size: 12px; font-weight: 500; }
+
+        /* --- Header for inner pages --- */
+        .page-header {
+            display: flex; align-items: center; padding: 15px; background: var(--card-bg);
+            border-bottom: 1px solid var(--border-color); position: sticky; top: 0; z-index: 10;
+        }
+        .page-header i.fa-arrow-left { font-size: 20px; cursor: pointer; color: var(--text-main); padding: 5px; }
+        .page-header h2 { font-size: 18px; flex-grow: 1; text-align: center; margin-right: 15px; }
+        .page-header .header-action { font-size: 20px; cursor: pointer; color: var(--text-muted); padding: 5px; }
+        .page-header .header-action.active { color: var(--red); }
+
+        /* --- Details View --- */
+        .details-hero { padding: 25px 20px; text-align: center; border-bottom: 8px solid var(--bg-color); }
+        .details-address { color: var(--text-muted); font-size: 14px; margin-top: 8px; }
+        .nav-icon { 
+            margin-top: 15px; 
+            color: var(--primary); 
+            font-size: 24px; 
+            background: #eff6ff; 
+            width: 50px; 
+            height: 50px; 
+            line-height: 50px; 
+            border-radius: 50%; 
+            display: inline-block;
+            cursor: pointer;
+        }
+        body.dark-theme .nav-icon { background: #1e293b; }
+        
+        .score-panel { display: flex; justify-content: space-around; padding: 25px 20px; align-items: center; border-bottom: 8px solid var(--bg-color); }
+        .score-huge { font-size: 54px; font-weight: 800; color: var(--primary); line-height: 1; }
+        .score-huge-sub { font-size: 13px; color: var(--text-muted); margin-top: 5px; font-weight: bold; }
+        .sub-scores { display: flex; flex-direction: column; gap: 12px; }
+        .sub-score-item { display: flex; align-items: center; gap: 12px; font-size: 15px; font-weight: 600; color: var(--text-main); }
+        .sub-score-item .stars { color: var(--yellow); display: flex; align-items: center; gap: 4px; }
+
+        .review-action { padding: 20px; border-bottom: 8px solid var(--bg-color); }
+        .btn-block { display: block; width: 100%; }
+
+        .review-list { padding: 20px; }
+        .review-item { display: flex; gap: 15px; margin-bottom: 20px; border-bottom: 1px solid var(--border-color); padding-bottom: 15px; cursor: pointer;}
+        .reviewer-avatar { width: 44px; height: 44px; border-radius: 50%; background: #e5e7eb; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 18px; }
+        body.dark-theme .reviewer-avatar { background: #4b5563; }
+        .review-content { flex-grow: 1; }
+        .review-name { font-weight: bold; font-size: 15px; color: var(--text-main); }
+        .review-stars { color: var(--yellow); font-size: 12px; margin: 4px 0; }
+        .review-text { font-size: 14px; color: var(--text-muted); line-height: 1.5; }
+
+        /* --- Write Review View --- */
+        .write-review-container { padding: 20px; }
+        .rating-section { margin-bottom: 25px; }
+        .rating-title { font-size: 16px; font-weight: bold; margin-bottom: 10px; color: var(--text-main); }
+        .star-control { display: flex; gap: 12px; font-size: 34px; color: #d1d5db; cursor: pointer; }
+        .star-control i.active { color: var(--yellow); }
+        .rating-prompt { margin-top: 8px; font-size: 14px; color: var(--text-muted); min-height: 20px; font-weight: 500; }
+
+        .review-textarea {
+            width: 100%; height: 160px; padding: 15px; border-radius: 12px;
+            border: 1px solid var(--border-color); resize: none; font-size: 16px; margin-bottom: 25px;
+            outline: none; background: transparent; color: var(--text-main);
+        }
+        .review-textarea:focus { border-color: var(--primary); }
+
+        /* --- Profile View --- */
+        .profile-header {
+            background: var(--primary); color: #fff; padding: 45px 20px 25px 20px;
+            display: flex; flex-direction: column; align-items: center;
+        }
+        .profile-avatar { width: 84px; height: 84px; border-radius: 50%; background: #fff; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; font-size: 36px; color: var(--primary); box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        
+        .profile-name-container {
+            display: flex; align-items: center; gap: 8px; margin-bottom: 20px;
+        }
+        .profile-name { font-size: 22px; font-weight: bold; }
+        .edit-name-btn {
+            font-size: 14px; color: rgba(255,255,255,0.7); cursor: pointer;
+            padding: 5px; transition: color 0.2s;
+        }
+        .edit-name-btn:hover { color: #fff; }
+
+        .profile-stats { display: flex; width: 100%; justify-content: space-around; background: rgba(255,255,255,0.15); padding: 15px; border-radius: 12px; }
+        .stat-item { text-align: center; }
+        .stat-value { font-size: 20px; font-weight: bold; }
+        .stat-label { font-size: 12px; opacity: 0.85; margin-top: 2px; }
+
+        .menu-list { padding: 20px; }
+        .menu-item {
+            display: flex; align-items: center; padding: 18px 0; border-bottom: 1px solid var(--border-color);
+            font-size: 16px; color: var(--text-main); cursor: pointer;
+        }
+        .menu-item i:first-child { width: 35px; color: var(--text-muted); font-size: 20px; }
+        .menu-item .fa-chevron-right { margin-left: auto; color: #d1d5db; font-size: 14px; }
+
+        /* Settings CSS Details */
+        .settings-container { padding: 20px; }
+        .setting-row {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 18px 0; border-bottom: 1px solid var(--border-color);
+        }
+        .setting-label { font-size: 16px; font-weight: 500; }
+        .setting-control select, .setting-control input {
+            padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color);
+            background: var(--card-bg); color: var(--text-main); font-size: 14px; outline: none;
+        }
+
+        /* Custom Toggle Switch for Dark Mode */
+        .switch {
+            position: relative; display: inline-block; width: 50px; height: 26px;
+        }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #ccc; transition: .3s; border-radius: 34px;
+        }
+        .slider:before {
+            position: absolute; content: ""; height: 18px; width: 18px; left: 4px; bottom: 4px;
+            background-color: white; transition: .3s; border-radius: 50%;
+        }
+        input:checked + .slider { background-color: var(--primary); }
+        input:checked + .slider:before { transform: translateX(24px); }
+    </style>
+</head>
+<body>
+
+<div id="app">
+    
+    <div id="view-map" class="view active">
+        <div class="map-header">
+            <div class="search-bar">
+                <i class="fa fa-search" style="color: var(--text-muted);"></i>
+                <input type="text" id="map-search-input" placeholder="Search station in Chengdu...">
+            </div>
+            <div class="filters">
+                <select id="filter-brand"><option>All Brands</option><option>Shell</option><option>Sinopec</option><option>PetroChina</option></select>
+                <select id="filter-rating"><option>Any Rating</option><option>4+ Stars</option><option>3+ Stars</option></select>
+                <select id="filter-distance"><option>Distance</option><option>Nearest First</option></select>
+            </div>
+        </div>
+
+        <div id="map"></div>
+
+        <div class="bottom-card" id="station-card">
+            <div class="card-header">
+                <div class="card-title" id="card-name">Station Name</div>
+                <div class="card-distance" id="card-distance">0.0 km</div>
+            </div>
+            <div class="card-rating" id="card-rating">
+                <i class="fa fa-star"></i> <span>4.5</span>
+            </div>
+            <button class="btn-primary" onclick="navigateTo('view-details')">View Details</button>
+        </div>
+
+        <div class="bottom-nav">
+            <div class="nav-item active" onclick="switchNav('view-map')">
+                <i class="fa fa-map-location-dot"></i>
+                <span>Discover</span>
+            </div>
+            <div class="nav-item" onclick="switchNav('view-profile')">
+                <i class="fa fa-user"></i>
+                <span>Me</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="view-details" class="view">
+        <div class="page-header">
+            <i class="fa fa-arrow-left" id="back-btn-details" onclick="goBackFromDetails()"></i>
+            <h2>Station Details</h2>
+            <i class="fa-regular fa-bookmark header-action" id="detail-bookmark" onclick="toggleBookmark()"></i>
+        </div>
+        
+        <div class="details-hero">
+            <h3 style="font-size: 22px; color: var(--text-main);" id="detail-name">Shell Gas Station</h3>
+            <div class="details-address" id="detail-address">Tianfu Square, Chengdu</div>
+            <div class="nav-icon"><i class="fa-solid fa-location-arrow"></i></div>
+        </div>
+
+        <div class="score-panel">
+            <div style="text-align: center;">
+                <div class="score-huge" id="detail-score">4.8</div>
+                <div class="score-huge-sub">Overall Rating</div>
+            </div>
+            <div class="sub-scores">
+                <div class="sub-score-item">
+                    <span>Service</span>
+                    <span class="stars" id="detail-service-score"><i class="fa fa-star"></i> 4.9</span>
+                </div>
+                <div class="sub-score-item">
+                    <span>Quality</span>
+                    <span class="stars" id="detail-quality-score"><i class="fa fa-star"></i> 4.7</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="review-action">
+            <button class="btn-primary btn-block" onclick="navigateTo('view-write-review')">Write a Review</button>
+        </div>
+
+        <div class="review-list">
+            <h4 style="margin-bottom: 15px; color: var(--text-main); font-size: 16px;">User Reviews</h4>
+            <div id="comments-container"></div>
+        </div>
+    </div>
+
+    <div id="view-write-review" class="view">
+        <div class="page-header">
+            <i class="fa fa-arrow-left" onclick="navigateTo('view-details')"></i>
+            <h2>Write a Review</h2>
+        </div>
+        
+        <div class="write-review-container">
+            <div class="rating-section">
+                <div class="rating-title">Oil Quality</div>
+                <div class="star-control" id="star-quality">
+                    <i class="fa-regular fa-star" data-val="1"></i><i class="fa-regular fa-star" data-val="2"></i>
+                    <i class="fa-regular fa-star" data-val="3"></i><i class="fa-regular fa-star" data-val="4"></i><i class="fa-regular fa-star" data-val="5"></i>
+                </div>
+                <div class="rating-prompt" id="prompt-quality">Tap to rate</div>
+            </div>
+
+            <div class="rating-section">
+                <div class="rating-title">Service Attitude</div>
+                <div class="star-control" id="star-service">
+                    <i class="fa-regular fa-star" data-val="1"></i><i class="fa-regular fa-star" data-val="2"></i>
+                    <i class="fa-regular fa-star" data-val="3"></i><i class="fa-regular fa-star" data-val="4"></i><i class="fa-regular fa-star" data-val="5"></i>
+                </div>
+                <div class="rating-prompt" id="prompt-service">Tap to rate</div>
+            </div>
+
+            <textarea class="review-textarea" id="review-text-input" placeholder="Share more about your experience (optional)..."></textarea>
+            
+            <button class="btn-primary btn-block" onclick="submitReview()">Publish Review</button>
+        </div>
+    </div>
+
+    <div id="view-profile" class="view">
+        <div class="profile-header">
+            <div class="profile-avatar"><i class="fa fa-user"></i></div>
+            
+            <div class="profile-name-container">
+                <div class="profile-name" id="profile-display-name">Alex Driver</div>
+                <i class="fa fa-pen edit-name-btn" onclick="editUserName()" title="Edit Name"></i>
+            </div>
+
+            <div class="profile-stats">
+                <div class="stat-item">
+                    <div class="stat-value" id="profile-reviews-count">2</div>
+                    <div class="stat-label">Reviews</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">48</div>
+                    <div class="stat-label">Likes</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="menu-list">
+            <div class="menu-item" onclick="navigateTo('view-my-reviews')">
+                <i class="fa fa-comment-dots"></i>
+                <span>My Reviews</span>
+                <i class="fa fa-chevron-right"></i>
+            </div>
+            <div class="menu-item" onclick="navigateTo('view-saved-stations')">
+                <i class="fa fa-bookmark"></i>
+                <span>Saved Stations</span>
+                <i class="fa fa-chevron-right"></i>
+            </div>
+            <div class="menu-item" onclick="navigateTo('view-settings')">
+                <i class="fa fa-cog"></i>
+                <span>Settings</span>
+                <i class="fa fa-chevron-right"></i>
+            </div>
+        </div>
+
+        <div class="bottom-nav">
+            <div class="nav-item" onclick="switchNav('view-map')">
+                <i class="fa fa-map-location-dot"></i>
+                <span>Discover</span>
+            </div>
+            <div class="nav-item active" onclick="switchNav('view-profile')">
+                <i class="fa fa-user"></i>
+                <span>Me</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="view-my-reviews" class="view">
+        <div class="page-header">
+            <i class="fa fa-arrow-left" onclick="navigateTo('view-profile')"></i>
+            <h2>My Reviews</h2>
+        </div>
+        <div class="review-list" id="my-reviews-container">
+            </div>
+    </div>
+
+    <div id="view-saved-stations" class="view">
+        <div class="page-header">
+            <i class="fa fa-arrow-left" onclick="navigateTo('view-profile')"></i>
+            <h2>Saved Stations</h2>
+        </div>
+        <div class="review-list" id="saved-stations-container">
+            </div>
+    </div>
+
+    <div id="view-settings" class="view">
+        <div class="page-header">
+            <i class="fa fa-arrow-left" onclick="navigateTo('view-profile')"></i>
+            <h2>Settings</h2>
+        </div>
+        <div class="settings-container">
+            <div class="setting-row">
+                <div class="setting-label">Dark Mode</div>
+                <div class="setting-control">
+                    <label class="switch">
+                        <input type="checkbox" id="dark-mode-toggle" onchange="toggleDarkMode()">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-label">Distance Unit</div>
+                <div class="setting-control">
+                    <select id="distance-unit-select" onchange="changeDistanceUnit()">
+                        <option value="km">Kilometers (km)</option>
+                        <option value="mi">Miles (mi)</option>
+                    </select>
+                </div>
+            </div>
+            <button class="btn-danger btn-block" onclick="resetAppState()">Clear Review Cache & Reset</button>
+        </div>
+    </div>
+
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    // --- Mock Stations in Chengdu, China ---
+    const initialStations = [
+        { 
+            id: 1, 
+            name: "PetroChina (Tianfu Square)", 
+            address: "88 Renmin East Rd, Qingyang District, Chengdu", 
+            lat: 30.6575, 
+            lng: 104.0661, 
+            rating: 4.5, 
+            serviceRating: 4.4,
+            qualityRating: 4.6,
+            distance: 0.4, 
+            brand: "PetroChina",
+            reviews: [
+                { name: "Sheng Li", rating: 5, text: "Excellent location right near Tianfu Square. Fuel quality is stable and service is very swift." },
+                { name: "John Smith", rating: 4, text: "Convenient station, but wait times can be slightly long during rush hours." }
+            ]
+        },
+        { 
+            id: 2, 
+            name: "Sinopec (Chunxi Road)", 
+            address: "128 Hongxing Rd, Jinjiang District, Chengdu", 
+            lat: 30.6530, 
+            lng: 104.0800, 
+            rating: 4.1, 
+            serviceRating: 4.0,
+            qualityRating: 4.2,
+            distance: 1.5,
+            brand: "Sinopec",
+            reviews: [
+                { name: "Chengdu Driver", rating: 4, text: "Good fuel discount on weekends. The car wash service is highly recommended." }
+            ]
+        },
+        { 
+            id: 3, 
+            name: "Shell (Kuanzhai Alley)", 
+            address: "45 Changshun Upper St, Qingyang District, Chengdu", 
+            lat: 30.6650, 
+            lng: 104.0500, 
+            rating: 4.8, 
+            serviceRating: 4.9,
+            qualityRating: 4.7,
+            distance: 1.8,
+            brand: "Shell",
+            reviews: [
+                { name: "Xiao Wang", rating: 5, text: "Absolutely outstanding. Clean store, supreme service, and high-quality premium fuel!" }
+            ]
+        },
+        { 
+            id: 4, 
+            name: "PetroChina (Jiuyan Bridge)", 
+            address: "33 Wangjiang Rd, Wuhou District, Chengdu", 
+            lat: 30.6380, 
+            lng: 104.0845, 
+            rating: 3.8, 
+            serviceRating: 3.6,
+            qualityRating: 4.0,
+            distance: 2.5,
+            brand: "PetroChina",
+            reviews: [
+                { name: "Night Owl", rating: 3, text: "Okay station, convenient for late-night drivers near the bar street, but restrooms could be cleaner." }
+            ]
+        },
+        { 
+            id: 5, 
+            name: "Sinopec (Wuhou Shrine)", 
+            address: "231 Wuhouci St, Wuhou District, Chengdu", 
+            lat: 30.6430, 
+            lng: 104.0450, 
+            rating: 4.2, 
+            serviceRating: 4.1,
+            qualityRating: 4.3,
+            distance: 2.8,
+            brand: "Sinopec",
+            reviews: []
+        },
+        { 
+            id: 6, 
+            name: "Shell (Niuwangmiao)", 
+            address: "98 Dongda St, Jinjiang District, Chengdu", 
+            lat: 30.6485, 
+            lng: 104.0910, 
+            rating: 4.6, 
+            serviceRating: 4.5,
+            qualityRating: 4.7,
+            distance: 2.3,
+            brand: "Shell",
+            reviews: []
+        },
+        { 
+            id: 7, 
+            name: "PetroChina (Sichuan University)", 
+            address: "24 South First Ring Rd, Wuhou District, Chengdu", 
+            lat: 30.6290, 
+            lng: 104.0750, 
+            rating: 3.2, 
+            serviceRating: 3.0,
+            qualityRating: 3.4,
+            distance: 3.4,
+            brand: "PetroChina",
+            reviews: [
+                { name: "Student Driver", rating: 3, text: "Very crowded during peak university hours. Basic services are just average." }
+            ]
+        }
+    ];
+
+    // Local Storage or memory-based State
+    let stations = JSON.parse(localStorage.getItem('gas_stations_data')) || initialStations;
+    let savedStationIds = JSON.parse(localStorage.getItem('gas_saved_stations')) || [1, 3];
+    let myReviews = JSON.parse(localStorage.getItem('gas_user_reviews')) || [
+        { stationId: 1, stationName: "PetroChina (Tianfu Square)", rating: 5, text: "Excellent location right near Tianfu Square. Fuel quality is stable and service is very swift." },
+        { stationId: 3, stationName: "Shell (Kuanzhai Alley)", rating: 5, text: "Absolutely outstanding. Clean store, supreme service, and high-quality premium fuel!" }
+    ];
+    let appSettings = JSON.parse(localStorage.getItem('gas_app_settings')) || {
+        darkMode: false,
+        distanceUnit: "km"
+    };
+    
+    // User Profile Name Management
+    let currentUserName = localStorage.getItem('gas_user_name') || "Alex Driver";
+
+    let map;
+    let currentStation = stations[0];
+    let selectedQualityScore = 0;
+    let selectedServiceScore = 0;
+    let mapMarkers = [];
+    let previousView = 'view-map';
+
+    // --- User Profile Functions ---
+    function editUserName() {
+        const newName = prompt("Enter your new profile name:", currentUserName);
+        if (newName && newName.trim() !== "") {
+            currentUserName = newName.trim();
+            localStorage.setItem('gas_user_name', currentUserName);
+            updateProfileNameDisplay();
+            alert("Name updated successfully!");
+        }
+    }
+
+    function updateProfileNameDisplay() {
+        document.getElementById('profile-display-name').innerText = currentUserName;
+    }
+
+    // --- Navigation System ---
+    function navigateTo(viewId) {
+        const activeView = document.querySelector('.view.active');
+        if (activeView && activeView.id !== viewId) {
+            previousView = activeView.id;
+        }
+
+        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+        document.getElementById(viewId).classList.add('active');
+        
+        if (viewId === 'view-map') {
+            if (map) { setTimeout(() => { map.invalidateSize(); }, 150); }
+            document.getElementById('station-card').classList.remove('show');
+        } else if (viewId === 'view-details') {
+            renderDetailsPage();
+        } else if (viewId === 'view-my-reviews') {
+            renderMyReviews();
+        } else if (viewId === 'view-saved-stations') {
+            renderSavedStations();
+        } else if (viewId === 'view-settings') {
+            renderSettingsPage();
+        }
+    }
+
+    function switchNav(viewId) {
+        document.getElementById('station-card').classList.remove('show');
+        document.querySelectorAll('.bottom-nav .nav-item').forEach(item => {
+            item.classList.remove('active');
+        });
+        
+        if (viewId === 'view-map') {
+            document.querySelectorAll('.bottom-nav .nav-item')[0].classList.add('active');
+            document.querySelectorAll('.bottom-nav .nav-item')[2]?.classList.add('active');
+        } else if (viewId === 'view-profile') {
+            document.querySelectorAll('.bottom-nav .nav-item')[1].classList.add('active');
+            document.querySelectorAll('.bottom-nav .nav-item')[3]?.classList.add('active');
+        }
+        navigateTo(viewId);
+    }
+
+    function goBackFromDetails() {
+        if (previousView === 'view-my-reviews' || previousView === 'view-saved-stations') {
+            navigateTo(previousView);
+        } else {
+            navigateTo('view-map');
+        }
+    }
+
+    function saveAllToLocalStorage() {
+        localStorage.setItem('gas_stations_data', JSON.stringify(stations));
+        localStorage.setItem('gas_saved_stations', JSON.stringify(savedStationIds));
+        localStorage.setItem('gas_user_reviews', JSON.stringify(myReviews));
+        localStorage.setItem('gas_app_settings', JSON.stringify(appSettings));
+    }
+
+    // --- Render Details Page ---
+    function renderDetailsPage() {
+        document.getElementById('detail-name').innerText = currentStation.name;
+        document.getElementById('detail-address').innerText = currentStation.address;
+        document.getElementById('detail-score').innerText = currentStation.rating.toFixed(1);
+        document.getElementById('detail-service-score').innerHTML = `<i class="fa fa-star"></i> ${currentStation.serviceRating.toFixed(1)}`;
+        document.getElementById('detail-quality-score').innerHTML = `<i class="fa fa-star"></i> ${currentStation.qualityRating.toFixed(1)}`;
+
+        const bookmarkBtn = document.getElementById('detail-bookmark');
+        if (savedStationIds.includes(currentStation.id)) {
+            bookmarkBtn.className = 'fa-solid fa-bookmark header-action active';
+        } else {
+            bookmarkBtn.className = 'fa-regular fa-bookmark header-action';
+        }
+
+        const container = document.getElementById('comments-container');
+        container.innerHTML = '';
+        
+        if (currentStation.reviews.length === 0) {
+            container.innerHTML = `<div style="text-align:center; color: var(--text-muted); padding: 20px;">No reviews yet. Be the first to review!</div>`;
+            return;
+        }
+
+        currentStation.reviews.forEach(review => {
+            let starsHtml = '';
+            for (let i = 1; i <= 5; i++) {
+                if (i <= review.rating) {
+                    starsHtml += '<i class="fa fa-star"></i>';
+                } else {
+                    starsHtml += '<i class="fa-regular fa-star"></i>';
+                }
+            }
+
+            // Identify user's own comments dynamically using the current user's name
+            const isCurrentUser = (review.name === currentUserName);
+            const item = document.createElement('div');
+            item.className = 'review-item';
+            item.innerHTML = `
+                <div class="reviewer-avatar" style="${isCurrentUser ? 'background: var(--primary);' : ''}">
+                    <i class="fa fa-user"></i>
+                </div>
+                <div class="review-content">
+                    <div class="review-name">${review.name} ${isCurrentUser ? '(You)' : ''}</div>
+                    <div class="review-stars">${starsHtml}</div>
+                    <div class="review-text">${review.text}</div>
+                </div>
+            `;
+            container.appendChild(item);
+        });
+    }
+
+    function toggleBookmark() {
+        const id = currentStation.id;
+        const index = savedStationIds.indexOf(id);
+        if (index > -1) {
+            savedStationIds.splice(index, 1);
+        } else {
+            savedStationIds.push(id);
+        }
+        saveAllToLocalStorage();
+        renderDetailsPage();
+    }
+
+    function formatDistance(distInKm) {
+        if (appSettings.distanceUnit === "mi") {
+            const distInMiles = distInKm * 0.621371;
+            return distInMiles.toFixed(1) + " mi";
+        }
+        return distInKm.toFixed(1) + " km";
+    }
+
+    function renderMyReviews() {
+        const container = document.getElementById('my-reviews-container');
+        container.innerHTML = '';
+        
+        if (myReviews.length === 0) {
+            container.innerHTML = `<div style="text-align:center; color: var(--text-muted); padding: 40px;">You haven't written any reviews yet.</div>`;
+            return;
+        }
+
+        myReviews.forEach((review) => {
+            let starsHtml = '';
+            for (let i = 1; i <= 5; i++) {
+                starsHtml += i <= review.rating ? '<i class="fa fa-star"></i>' : '<i class="fa-regular fa-star"></i>';
+            }
+
+            const item = document.createElement('div');
+            item.className = 'review-item';
+            item.onclick = () => {
+                const targetStation = stations.find(s => s.id === review.stationId);
+                if (targetStation) {
+                    currentStation = targetStation;
+                    navigateTo('view-details');
+                }
+            };
+            item.innerHTML = `
+                <div class="reviewer-avatar" style="background: var(--primary);"><i class="fa fa-comment-dots"></i></div>
+                <div class="review-content">
+                    <div class="review-name" style="color: var(--primary);">${review.stationName}</div>
+                    <div class="review-stars">${starsHtml}</div>
+                    <div class="review-text" style="margin-top:5px; color: var(--text-main); font-weight:500;">"${review.text}"</div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 5px;">Tap to view station</div>
+                </div>
+            `;
+            container.appendChild(item);
+        });
+    }
+
+    function renderSavedStations() {
+        const container = document.getElementById('saved-stations-container');
+        container.innerHTML = '';
+
+        const savedStations = stations.filter(s => savedStationIds.includes(s.id));
+
+        if (savedStations.length === 0) {
+            container.innerHTML = `<div style="text-align:center; color: var(--text-muted); padding: 40px;">No saved stations.</div>`;
+            return;
+        }
+
+        savedStations.forEach(station => {
+            const item = document.createElement('div');
+            item.className = 'review-item';
+            item.onclick = () => {
+                currentStation = station;
+                navigateTo('view-details');
+            };
+            item.innerHTML = `
+                <div class="reviewer-avatar" style="background: var(--red);"><i class="fa fa-heart"></i></div>
+                <div class="review-content">
+                    <div class="review-name" style="color: var(--text-main);">${station.name}</div>
+                    <div class="review-stars" style="color: var(--yellow);"><i class="fa fa-star"></i> ${station.rating.toFixed(1)}</div>
+                    <div class="review-text" style="font-size:12px; margin-top:3px;">${station.address}</div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 5px;">Distance: ${formatDistance(station.distance)} • Tap to view</div>
+                </div>
+            `;
+            container.appendChild(item);
+        });
+    }
+
+    function renderSettingsPage() {
+        document.getElementById('dark-mode-toggle').checked = appSettings.darkMode;
+        document.getElementById('distance-unit-select').value = appSettings.distanceUnit;
+    }
+
+    function toggleDarkMode() {
+        const enabled = document.getElementById('dark-mode-toggle').checked;
+        appSettings.darkMode = enabled;
+        if (enabled) {
+            document.body.classList.add('dark-theme');
+        } else {
+            document.body.classList.remove('dark-theme');
+        }
+        saveAllToLocalStorage();
+    }
+
+    function changeDistanceUnit() {
+        appSettings.distanceUnit = document.getElementById('distance-unit-select').value;
+        saveAllToLocalStorage();
+        renderSavedStations();
+    }
+
+    function resetAppState() {
+        if (confirm("Are you sure you want to reset all data and settings to defaults?")) {
+            localStorage.clear();
+            stations = initialStations;
+            savedStationIds = [1, 3];
+            myReviews = [
+                { stationId: 1, stationName: "PetroChina (Tianfu Square)", rating: 5, text: "Excellent location right near Tianfu Square. Fuel quality is stable and service is very swift." },
+                { stationId: 3, stationName: "Shell (Kuanzhai Alley)", rating: 5, text: "Absolutely outstanding. Clean store, supreme service, and high-quality premium fuel!" }
+            ];
+            appSettings = { darkMode: false, distanceUnit: "km" };
+            currentUserName = "Alex Driver";
+            
+            document.body.classList.remove('dark-theme');
+            saveAllToLocalStorage();
+            alert("App reset successfully! Reloading...");
+            location.reload();
+        }
+    }
+
+    function renderMarkers() {
+        mapMarkers.forEach(marker => map.removeLayer(marker));
+        mapMarkers = [];
+
+        const brandFilter = document.getElementById('filter-brand').value;
+        const ratingFilter = document.getElementById('filter-rating').value;
+        const searchQuery = document.getElementById('map-search-input').value.toLowerCase();
+
+        stations.forEach(station => {
+            if (searchQuery && !station.name.toLowerCase().includes(searchQuery) && !station.address.toLowerCase().includes(searchQuery)) return;
+            if (brandFilter !== 'All Brands' && station.brand !== brandFilter) return;
+            if (ratingFilter === '4+ Stars' && station.rating < 4.0) return;
+            if (ratingFilter === '3+ Stars' && station.rating < 3.0) return;
+
+            let borderColor = 'var(--red)';
+            if (station.rating >= 4.0) borderColor = 'var(--green)';
+            else if (station.rating >= 3.0) borderColor = 'var(--yellow)';
+
+            const iconHtml = `<div class="custom-marker" style="border-color: ${borderColor}">
+                                <i class="fa fa-gas-pump" style="color: ${borderColor}"></i>
+                              </div>`;
+            
+            const customIcon = L.divIcon({
+                html: iconHtml,
+                className: 'custom-marker-container', 
+                iconSize: [44, 44],
+                iconAnchor: [22, 22]
+            });
+
+            const marker = L.marker([station.lat, station.lng], { icon: customIcon }).addTo(map);
+            mapMarkers.push(marker);
+
+            marker.on('click', () => {
+                map.panTo([station.lat - 0.005, station.lng]);
+                currentStation = station;
+                document.getElementById('card-name').innerText = station.name;
+                document.getElementById('card-distance').innerText = formatDistance(station.distance);
+                document.getElementById('card-rating').innerHTML = `<i class="fa fa-star"></i> ${station.rating.toFixed(1)}`;
+                document.getElementById('station-card').classList.add('show');
+            });
+        });
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        if (appSettings.darkMode) { document.body.classList.add('dark-theme'); }
+        
+        // Initialize dynamic UI pieces
+        document.getElementById('profile-reviews-count').innerText = myReviews.length;
+        updateProfileNameDisplay(); // Set correct name on load
+
+        map = L.map('map', { zoomControl: false, attributionControl: false }).setView([30.6586, 104.0648], 13);
+        
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+
+        setTimeout(() => { map.invalidateSize(); renderMarkers(); }, 300);
+
+        document.getElementById('filter-brand').addEventListener('change', renderMarkers);
+        document.getElementById('filter-rating').addEventListener('change', renderMarkers);
+        
+        document.getElementById('filter-distance').addEventListener('change', (e) => {
+            if (e.target.value === 'Nearest First') {
+                stations.sort((a, b) => a.distance - b.distance);
+            } else {
+                stations.sort((a, b) => a.id - b.id);
+            }
+            renderMarkers();
+        });
+
+        document.getElementById('map-search-input').addEventListener('input', renderMarkers);
+        map.on('click', () => { document.getElementById('station-card').classList.remove('show'); });
+    });
+
+    const starPrompts = { 1: "Terrible", 2: "Poor", 3: "Average", 4: "Good", 5: "Excellent" };
+
+    function setupStars(containerId, promptId, callback) {
+        const stars = document.querySelectorAll(`#${containerId} i`);
+        const promptEl = document.getElementById(promptId);
+
+        stars.forEach(star => {
+            star.addEventListener('click', (e) => {
+                const val = parseInt(e.target.getAttribute('data-val'));
+                stars.forEach(s => {
+                    const sVal = parseInt(s.getAttribute('data-val'));
+                    if (sVal <= val) {
+                        s.classList.add('active');
+                        s.classList.replace('fa-regular', 'fa-star');
+                    } else {
+                        s.classList.remove('active');
+                        s.classList.replace('fa-star', 'fa-regular');
+                    }
+                });
+                promptEl.innerText = starPrompts[val];
+                promptEl.style.color = 'var(--text-main)';
+                callback(val);
+            });
+        });
+    }
+
+    setupStars('star-quality', 'prompt-quality', (val) => { selectedQualityScore = val; });
+    setupStars('star-service', 'prompt-service', (val) => { selectedServiceScore = val; });
+
+    function submitReview() {
+        if (selectedQualityScore === 0 || selectedServiceScore === 0) {
+            alert("Please complete both star ratings before publishing!");
+            return;
+        }
+
+        const commentText = document.getElementById('review-text-input').value.trim();
+        const finalComment = commentText || "Perfect services!";
+        const userAverage = (selectedQualityScore + selectedServiceScore) / 2;
+        
+        // Push with the currently active dynamic user name
+        currentStation.reviews.unshift({
+            name: currentUserName,
+            rating: Math.round(userAverage),
+            text: finalComment
+        });
+
+        currentStation.rating = (currentStation.rating * 4 + userAverage) / 5;
+        currentStation.qualityRating = (currentStation.qualityRating * 4 + selectedQualityScore) / 5;
+        currentStation.serviceRating = (currentStation.serviceRating * 4 + selectedServiceScore) / 5;
+
+        myReviews.unshift({
+            stationId: currentStation.id,
+            stationName: currentStation.name,
+            rating: Math.round(userAverage),
+            text: finalComment
+        });
+
+        document.getElementById('profile-reviews-count').innerText = myReviews.length;
+
+        saveAllToLocalStorage();
+        alert("Your review has been successfully published!");
+        
+        document.querySelectorAll('.star-control i').forEach(s => {
+            s.classList.remove('active');
+            s.classList.replace('fa-star', 'fa-regular');
+        });
+        document.getElementById('prompt-quality').innerText = "Tap to rate";
+        document.getElementById('prompt-service').innerText = "Tap to rate";
+        document.getElementById('review-text-input').value = "";
+        selectedQualityScore = 0;
+        selectedServiceScore = 0;
+
+        navigateTo('view-details');
+    }
+</script>
+
+</body>
+</html>
