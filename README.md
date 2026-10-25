@@ -1,7 +1,6 @@
-Oil Review Map 
-A location-based gas station review application powered by real driver feedback. Through smooth map interactions, dynamic visual rating feedback, and a multi-dimensional evaluation system, it helps drivers quickly discover high-quality gas stations and avoid bad experiences.
-
-Core Features
+#Oil Review Map 
+A location-based gas station review application powered by real driver feedback. In China, different gas station provide oil with different qualities. Oil with low quality damages engines and reduces the life of engines. To avoid this problem, I made this app, allowing drivers to rate each gas station. Therefore, drivers can choose the stations that provide better oil.
+##Features
 1. Interactive Map Homepage: Full-screen map browsing with a top floating search bar (by name or address) and multi-dimensional filter chips (brand, rating, distance).
 
 2. Dynamic Status Icons: Map markers feature dynamic colored rings (green, yellow, red) based on the station's overall rating for instant visual feedback.
